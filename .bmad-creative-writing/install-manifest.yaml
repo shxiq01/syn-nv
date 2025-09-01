@@ -1,0 +1,273 @@
+version: 1.1.1
+installed_at: '2025-08-31T06:44:59.872Z'
+install_type: expansion-pack
+expansion_pack_id: bmad-creative-writing
+expansion_pack_name: bmad-creative-writing
+ides_setup:
+  - claude-code
+files:
+  - path: .bmad-creative-writing/config.yaml
+    hash: 01bdc6d8e25a0201
+    modified: false
+  - path: .bmad-creative-writing/README.md
+    hash: 8c5daf4843b3bec7
+    modified: false
+  - path: .bmad-creative-writing/utils/workflow-management.md
+    hash: b148df3ebb1f9c61
+    modified: false
+  - path: .bmad-creative-writing/utils/bmad-doc-template.md
+    hash: 7191989495b8c8fd
+    modified: false
+  - path: .bmad-creative-writing/workflows/short-story-creation.yaml
+    hash: 219f89471939b7a9
+    modified: false
+  - path: .bmad-creative-writing/workflows/series-planning.yaml
+    hash: 59593a9d1cf5333d
+    modified: false
+  - path: .bmad-creative-writing/workflows/screenplay-development.yaml
+    hash: d242b14535b5aa42
+    modified: false
+  - path: .bmad-creative-writing/workflows/novel-writing.yaml
+    hash: abe2f41fb67afc96
+    modified: false
+  - path: .bmad-creative-writing/workflows/novel-snowflake-workflow.yaml
+    hash: 4b0b74f3611995c4
+    modified: false
+  - path: .bmad-creative-writing/workflows/novel-serial-workflow.yaml
+    hash: 3d9de09c819ee82b
+    modified: false
+  - path: .bmad-creative-writing/workflows/novel-greenfield-workflow.yaml
+    hash: 98a2be772321cb8f
+    modified: false
+  - path: .bmad-creative-writing/workflows/book-cover-design-workflow.md
+    hash: 296a81d4e9fed7d6
+    modified: false
+  - path: .bmad-creative-writing/templates/world-guide-tmpl.yaml
+    hash: 3906c9b927583d05
+    modified: false
+  - path: .bmad-creative-writing/templates/story-outline-tmpl.yaml
+    hash: bee3785519b90f68
+    modified: false
+  - path: .bmad-creative-writing/templates/scene-list-tmpl.yaml
+    hash: aecfefa7be89b7e3
+    modified: false
+  - path: .bmad-creative-writing/templates/premise-brief-tmpl.yaml
+    hash: 0953b80eb2fb655d
+    modified: false
+  - path: .bmad-creative-writing/templates/cover-design-brief-tmpl.yaml
+    hash: 29d5cf27159adc2f
+    modified: false
+  - path: .bmad-creative-writing/templates/character-profile-tmpl.yaml
+    hash: 7b80d1700cf67fd8
+    modified: false
+  - path: .bmad-creative-writing/templates/chapter-draft-tmpl.yaml
+    hash: edaaae0c35336820
+    modified: false
+  - path: .bmad-creative-writing/templates/beta-feedback-form.yaml
+    hash: 7050077cba02246c
+    modified: false
+  - path: .bmad-creative-writing/tasks/workshop-dialog.md
+    hash: da57943dad4c7bc8
+    modified: false
+  - path: .bmad-creative-writing/tasks/select-next-arc.md
+    hash: e0d3069819c2a20a
+    modified: false
+  - path: .bmad-creative-writing/tasks/quick-feedback.md
+    hash: e04b25647e39af6a
+    modified: false
+  - path: .bmad-creative-writing/tasks/publish-chapter.md
+    hash: 842f50f4be8e3271
+    modified: false
+  - path: .bmad-creative-writing/tasks/provide-feedback.md
+    hash: 377a1a640ed08b13
+    modified: false
+  - path: .bmad-creative-writing/tasks/outline-scenes.md
+    hash: 19488438bf00712f
+    modified: false
+  - path: .bmad-creative-writing/tasks/kb-mode-interaction.md
+    hash: 2c52751f40ae7ef0
+    modified: false
+  - path: .bmad-creative-writing/tasks/incorporate-feedback.md
+    hash: 4ff20af006deff33
+    modified: false
+  - path: .bmad-creative-writing/tasks/generate-scene-list.md
+    hash: eb2ee6c1f6caf7c2
+    modified: false
+  - path: .bmad-creative-writing/tasks/generate-cover-prompts.md
+    hash: d17d15e52236380a
+    modified: false
+  - path: .bmad-creative-writing/tasks/generate-cover-brief.md
+    hash: 052238d852c71b0a
+    modified: false
+  - path: .bmad-creative-writing/tasks/final-polish.md
+    hash: 8fdb30d588af22fd
+    modified: false
+  - path: .bmad-creative-writing/tasks/expand-synopsis.md
+    hash: b5a96d65f184794f
+    modified: false
+  - path: .bmad-creative-writing/tasks/expand-premise.md
+    hash: a31693d0896e071a
+    modified: false
+  - path: .bmad-creative-writing/tasks/execute-checklist.md
+    hash: 9ab5743530861e32
+    modified: false
+  - path: .bmad-creative-writing/tasks/develop-character.md
+    hash: a1aafb40e341c9d5
+    modified: false
+  - path: .bmad-creative-writing/tasks/critical-review.md
+    hash: 24e131e4f4546593
+    modified: false
+  - path: .bmad-creative-writing/tasks/create-draft-section.md
+    hash: 9722837f57e68fdf
+    modified: false
+  - path: .bmad-creative-writing/tasks/create-doc.md
+    hash: 395719b8a002f7f9
+    modified: false
+  - path: .bmad-creative-writing/tasks/character-depth-pass.md
+    hash: 7df014c1ad8d1873
+    modified: false
+  - path: .bmad-creative-writing/tasks/build-world.md
+    hash: 1759639da1112ab3
+    modified: false
+  - path: .bmad-creative-writing/tasks/brainstorm-premise.md
+    hash: bc166297159cc180
+    modified: false
+  - path: .bmad-creative-writing/tasks/assemble-kdp-package.md
+    hash: d756ab17b1d1a76b
+    modified: false
+  - path: .bmad-creative-writing/tasks/analyze-story-structure.md
+    hash: 09f515b7bfdc1ba7
+    modified: false
+  - path: .bmad-creative-writing/tasks/analyze-reader-feedback.md
+    hash: e7d9ebf90a2f8a6e
+    modified: false
+  - path: .bmad-creative-writing/tasks/advanced-elicitation.md
+    hash: 28e3b538dc6fe104
+    modified: false
+  - path: .bmad-creative-writing/checklists/ya-appropriateness-checklist.md
+    hash: bdfcabb8187da40c
+    modified: false
+  - path: .bmad-creative-writing/checklists/world-building-continuity-checklist.md
+    hash: 319366754ae9ed60
+    modified: false
+  - path: .bmad-creative-writing/checklists/timeline-continuity-checklist.md
+    hash: 9faa23ac93e6b16c
+    modified: false
+  - path: .bmad-creative-writing/checklists/thriller-pacing-stakes-checklist.md
+    hash: dd29a87c4242a4ea
+    modified: false
+  - path: .bmad-creative-writing/checklists/steampunk-gadget-checklist.md
+    hash: ad3ab4bb159ad0c2
+    modified: false
+  - path: .bmad-creative-writing/checklists/sensitivity-representation-checklist.md
+    hash: 6d73ea565cf29b70
+    modified: false
+  - path: >-
+      .bmad-creative-writing/checklists/scifi-technology-plausibility-checklist.md
+    hash: 4d872df0114110e5
+    modified: false
+  - path: .bmad-creative-writing/checklists/scene-quality-checklist.md
+    hash: 9212f6cf54000a01
+    modified: false
+  - path: .bmad-creative-writing/checklists/romance-emotional-beats-checklist.md
+    hash: cff0650911aa755b
+    modified: false
+  - path: .bmad-creative-writing/checklists/publication-readiness-checklist.md
+    hash: 5e1d3b94c816443a
+    modified: false
+  - path: .bmad-creative-writing/checklists/plot-structure-checklist.md
+    hash: 685e9e643e328571
+    modified: false
+  - path: .bmad-creative-writing/checklists/orbital-mechanics-checklist.md
+    hash: 473618364f02df49
+    modified: false
+  - path: .bmad-creative-writing/checklists/mystery-clue-trail-checklist.md
+    hash: cd23565a75a07826
+    modified: false
+  - path: .bmad-creative-writing/checklists/marketing-copy-checklist.md
+    hash: 67902932251ff922
+    modified: false
+  - path: .bmad-creative-writing/checklists/line-edit-quality-checklist.md
+    hash: cb97523f2bc75a19
+    modified: false
+  - path: .bmad-creative-writing/checklists/kdp-cover-ready-checklist.md
+    hash: 8ccc864d65636de4
+    modified: false
+  - path: .bmad-creative-writing/checklists/horror-suspense-checklist.md
+    hash: c0f204d601bb69c5
+    modified: false
+  - path: .bmad-creative-writing/checklists/historical-accuracy-checklist.md
+    hash: 064a0050949cd502
+    modified: false
+  - path: .bmad-creative-writing/checklists/genre-tropes-checklist.md
+    hash: 5b3f540e3fc0ec72
+    modified: false
+  - path: .bmad-creative-writing/checklists/foreshadowing-payoff-checklist.md
+    hash: 541d353da203e078
+    modified: false
+  - path: .bmad-creative-writing/checklists/fantasy-magic-system-checklist.md
+    hash: 5603fb7a500fe621
+    modified: false
+  - path: .bmad-creative-writing/checklists/epic-poetry-meter-checklist.md
+    hash: 41819ac6a9d9ec23
+    modified: false
+  - path: .bmad-creative-writing/checklists/ebook-formatting-checklist.md
+    hash: 9fcef3a0561d9f1b
+    modified: false
+  - path: .bmad-creative-writing/checklists/cyberpunk-aesthetic-checklist.md
+    hash: 9938f4304453451f
+    modified: false
+  - path: .bmad-creative-writing/checklists/comedic-timing-checklist.md
+    hash: 7743963e0f780b75
+    modified: false
+  - path: .bmad-creative-writing/checklists/character-consistency-checklist.md
+    hash: d49aa4467b26f26e
+    modified: false
+  - path: .bmad-creative-writing/checklists/beta-feedback-closure-checklist.md
+    hash: 60c81d7a207b65c1
+    modified: false
+  - path: .bmad-creative-writing/agents/world-builder.md
+    hash: 2efe30bf4fb16d01
+    modified: false
+  - path: .bmad-creative-writing/agents/plot-architect.md
+    hash: 4960ff2d9eceb5cd
+    modified: false
+  - path: .bmad-creative-writing/agents/narrative-designer.md
+    hash: bcc037788467d20b
+    modified: false
+  - path: .bmad-creative-writing/agents/genre-specialist.md
+    hash: 770d0d784572e8fe
+    modified: false
+  - path: .bmad-creative-writing/agents/editor.md
+    hash: 8a7a0184833c0e91
+    modified: false
+  - path: .bmad-creative-writing/agents/dialog-specialist.md
+    hash: 36cf273bdbf32732
+    modified: false
+  - path: .bmad-creative-writing/agents/cover-designer.md
+    hash: e13ccbd056279ecb
+    modified: false
+  - path: .bmad-creative-writing/agents/character-psychologist.md
+    hash: 80ea326514aa2e99
+    modified: false
+  - path: .bmad-creative-writing/agents/book-critic.md
+    hash: 21663d921a93fadb
+    modified: false
+  - path: .bmad-creative-writing/agents/bmad-orchestrator.md
+    hash: ca9742fedc1cee04
+    modified: false
+  - path: .bmad-creative-writing/agents/beta-reader.md
+    hash: e0c51de8afb5482f
+    modified: false
+  - path: .bmad-creative-writing/agent-teams/agent-team.yaml
+    hash: 30ec4ad9b80b0765
+    modified: false
+  - path: .bmad-creative-writing/data/story-structures.md
+    hash: ea321ffe07c27040
+    modified: false
+  - path: .bmad-creative-writing/data/elicitation-methods.md
+    hash: 82d24b664e1a58ff
+    modified: false
+  - path: .bmad-creative-writing/data/bmad-kb.md
+    hash: df22602d5219dcbd
+    modified: false
