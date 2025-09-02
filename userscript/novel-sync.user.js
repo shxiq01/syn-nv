@@ -2262,15 +2262,15 @@
                     return true;
                 };
 
-                // 直接选择字段 - 最终版本
+                // 基于API的正确自动选择实现
                 const autoSelectField = async (inputId, value, description) => {
                     const input = document.getElementById(inputId);
                     if (!input || !value) return false;
                     
-                    console.log(`🎯 直接选择${description}: "${value}"`);
+                    console.log(`🔍 API搜索并选择${description}: "${value}"`);
                     
                     try {
-                        // 方法1: 检查是否已经有值了
+                        // 步骤1: 检查是否已经有值
                         const hiddenFieldId = inputId.replace('_change_100', '100');
                         const hiddenField = document.getElementById(hiddenFieldId);
                         
@@ -2279,102 +2279,248 @@
                             return true;
                         }
                         
-                        // 方法2: 查找页面上已存在的选择项并直接点击
-                        const changeItemSelectors = [
-                            `[onclick*="changeitem"][onclick*="${value}"]`,
-                            `[onclick*="changeitem"]:contains("${value}")`,
-                            '.change_list',
-                            '.livesearch .change_list',
-                            '.livesearchgroup .change_list'
-                        ];
+                        // 步骤2: 通过AJAX API搜索
+                        const searchType = inputId.includes('title') ? 'series' : 'group';
+                        const searchParams = new URLSearchParams({
+                            action: 'nd_ajaxsearch',
+                            str: value,
+                            strID: '100',
+                            strType: searchType
+                        });
                         
-                        for (const selector of changeItemSelectors) {
-                            let elements;
-                            if (selector.includes(':contains')) {
-                                // 手动查找包含文本的元素
-                                elements = Array.from(document.querySelectorAll(selector.split(':contains')[0]))
-                                    .filter(el => el.textContent.toLowerCase().includes(value.toLowerCase()));
-                            } else {
-                                elements = document.querySelectorAll(selector);
-                            }
-                            
-                            for (const element of elements) {
-                                const text = element.textContent.trim();
-                                if (text.toLowerCase() === value.toLowerCase() || 
-                                    text.toLowerCase().includes(value.toLowerCase()) ||
-                                    value.toLowerCase().includes(text.toLowerCase())) {
-                                    
-                                    console.log(`🎯 找到匹配项，直接点击: "${text}"`);
-                                    element.click();
-                                    
-                                    await new Promise(resolve => setTimeout(resolve, 300));
-                                    
-                                    if (hiddenField && hiddenField.value) {
-                                        console.log(`✅ ${description}点击选择成功: "${text}" (ID: ${hiddenField.value})`);
-                                        return true;
-                                    }
-                                }
-                            }
+                        console.log(`📡 发送搜索请求: ${searchType} = "${value}"`);
+                        
+                        const response = await fetch('https://www.novelupdates.com/wp-admin/admin-ajax.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: searchParams,
+                            credentials: 'include'
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`搜索请求失败: ${response.status}`);
                         }
                         
-                        // 方法3: 直接调用changeitem函数（如果能找到参数）
-                        const allChangeItems = document.querySelectorAll('[onclick*="changeitem"]');
-                        for (const item of allChangeItems) {
-                            const text = item.textContent.trim();
-                            if (text.toLowerCase().includes(value.toLowerCase()) ||
-                                value.toLowerCase().includes(text.toLowerCase())) {
+                        const responseText = await response.text();
+                        // 移除最后的 '0' 字符 (根据showResult函数: e = e.slice(0, -1))
+                        const cleanedResponse = responseText.slice(0, -1);
+                        
+                        console.log(`📦 搜索结果长度: ${cleanedResponse.length} 字符`);
+                        console.log(`📦 搜索结果内容预览: ${cleanedResponse.substring(0, 200)}...`);
+                        
+                        // 步骤3: 直接解析HTML响应内容
+                        if (cleanedResponse && cleanedResponse.trim()) {
+                            console.log(`🔍 开始解析HTML搜索结果...`);
+                            
+                            // 创建临时DOM来解析响应内容
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = cleanedResponse;
+                            
+                            // 查找所有的选择项
+                            const changeItems = tempDiv.querySelectorAll('.change_list');
+                            console.log(`🔎 解析到 ${changeItems.length} 个搜索结果选项`);
+                            
+                            if (changeItems.length === 0) {
+                                console.log(`❌ 未找到 .change_list 元素，尝试解析其他结构`);
+                                // 打印HTML结构供调试
+                                console.log(`🔧 HTML结构: ${cleanedResponse}`);
+                                return false;
+                            }
+                            
+                            // 先尝试精确匹配
+                            for (const item of changeItems) {
+                                const itemText = item.textContent.trim();
+                                console.log(`📋 检查精确匹配: "${itemText}"`);
                                 
-                                const onclick = item.getAttribute('onclick');
-                                const match = onclick.match(/changeitem\('([^']+)','([^']+)','([^']+)',this\)/);
-                                if (match) {
-                                    const [, param1, param2, param3] = match;
-                                    console.log(`🔧 直接调用changeitem('${param1}','${param2}','${param3}') for "${text}"`);
-                                    
-                                    if (typeof window.changeitem === 'function') {
-                                        window.changeitem(param1, param2, param3, item);
-                                        
-                                        await new Promise(resolve => setTimeout(resolve, 300));
-                                        
-                                        if (hiddenField && hiddenField.value) {
-                                            console.log(`✅ ${description}函数调用成功: "${text}" (ID: ${hiddenField.value})`);
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // 方法4: 强制设置隐藏字段（最后备用）
-                        if (hiddenField) {
-                            // 尝试从现有的选择项中找到ID
-                            const potentialItems = document.querySelectorAll('[onclick*="changeitem"]');
-                            for (const item of potentialItems) {
-                                const text = item.textContent.trim();
-                                if (text.toLowerCase() === value.toLowerCase()) {
-                                    const onclick = item.getAttribute('onclick');
-                                    const match = onclick.match(/changeitem\('[^']+','([^']+)','[^']+',this\)/);
-                                    if (match) {
-                                        const itemId = match[1];
-                                        hiddenField.value = itemId;
-                                        input.value = text;
-                                        
-                                        console.log(`🔧 ${description}强制设置: "${text}" (ID: ${itemId})`);
-                                        return true;
-                                    }
+                                if (itemText.toLowerCase() === value.toLowerCase()) {
+                                    console.log(`🎯 找到精确匹配: "${itemText}"`);
+                                    return await executeSelectionByOnclick(item, hiddenField, input, description);
                                 }
                             }
                             
-                            // 最后的尝试：设置一个默认值
-                            input.value = value;
-                            console.log(`⚠️ ${description}仅设置显示值: "${value}"`);
-                            return true;
+                            // 然后尝试包含匹配
+                            for (const item of changeItems) {
+                                const itemText = item.textContent.trim();
+                                
+                                if (itemText.toLowerCase().includes(value.toLowerCase()) ||
+                                    value.toLowerCase().includes(itemText.toLowerCase())) {
+                                    console.log(`🎯 找到包含匹配: "${itemText}"`);
+                                    return await executeSelectionByOnclick(item, hiddenField, input, description);
+                                }
+                            }
                         }
                         
-                        console.log(`❌ ${description}选择失败`);
+                        console.log(`❌ ${description}搜索结果中未找到匹配项`);
                         return false;
                         
                     } catch (error) {
-                        console.error(`${description}选择出错:`, error);
+                        console.error(`${description}搜索选择出错:`, error);
+                        return false;
+                    }
+                };
+
+                // 执行选择操作的辅助函数
+                const executeSelection = async function(item, hiddenField, input, description) {
+                    try {
+                        // 方法1: 直接点击元素
+                        item.click();
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        
+                        if (hiddenField && hiddenField.value) {
+                            console.log(`✅ ${description}点击选择成功！`);
+                            console.log(`   显示值: "${input.value}"`);
+                            console.log(`   隐藏值: "${hiddenField.value}"`);
+                            return true;
+                        }
+                        
+                        // 方法2: 解析并调用changeitem函数
+                        const onclick = item.getAttribute('onclick');
+                        if (onclick) {
+                            const match = onclick.match(/changeitem\('([^']+)','([^']+)','([^']+)',this\)/);
+                            if (match) {
+                                const [, param1, param2, param3] = match;
+                                console.log(`🔧 直接调用changeitem('${param1}','${param2}','${param3}')`);
+                                
+                                if (typeof window.changeitem === 'function') {
+                                    window.changeitem(param1, param2, param3, item);
+                                    await new Promise(resolve => setTimeout(resolve, 300));
+                                    
+                                    if (hiddenField && hiddenField.value) {
+                                        console.log(`✅ ${description}函数调用成功: "${item.textContent.trim()}"`);
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        return false;
+                        
+                    } catch (error) {
+                        console.error(`执行${description}选择时出错:`, error);
+                        return false;
+                    }
+                };
+
+                // 等待changeitem函数并执行选择
+                const waitAndExecuteChangeitem = async function(param1, param2, param3, itemText, hiddenField, input, description) {
+                    // 等待函数加载的最大时间（毫秒）
+                    const maxWaitTime = 5000;
+                    const checkInterval = 100;
+                    let waitedTime = 0;
+                    
+                    console.log(`⏳ 等待changeitem函数加载...`);
+                    
+                    // 等待changeitem函数和jQuery加载
+                    while (waitedTime < maxWaitTime) {
+                        if (typeof window.changeitem === 'function' && typeof window.$ !== 'undefined') {
+                            console.log(`✅ changeitem函数和jQuery已加载，开始执行选择`);
+                            
+                            try {
+                                // 创建临时元素模拟点击源
+                                const tempElement = document.createElement('span');
+                                tempElement.textContent = itemText;
+                                
+                                // 调用changeitem函数
+                                window.changeitem(param1, param2, param3, tempElement);
+                                
+                                // 等待DOM更新
+                                await new Promise(resolve => setTimeout(resolve, 300));
+                                
+                                // 检查结果
+                                if (hiddenField && hiddenField.value === param2) {
+                                    console.log(`✅ ${description}选择成功: "${itemText}"`);
+                                    console.log(`   隐藏字段值: "${hiddenField.value}"`);
+                                    console.log(`   显示字段值: "${input.value}"`);
+                                    return true;
+                                } else {
+                                    console.log(`⚠️ changeitem执行后字段未更新，尝试手动设置`);
+                                }
+                            } catch (error) {
+                                console.error(`changeitem调用失败:`, error);
+                            }
+                            
+                            break;
+                        }
+                        
+                        await new Promise(resolve => setTimeout(resolve, checkInterval));
+                        waitedTime += checkInterval;
+                    }
+                    
+                    if (waitedTime >= maxWaitTime) {
+                        console.log(`⏰ 等待changeitem函数超时，使用手动设置方案`);
+                    }
+                    
+                    // 备用方案：直接设置字段值
+                    console.log(`🛠️ 执行手动字段设置...`);
+                    
+                    if (hiddenField && input) {
+                        // 设置隐藏字段的值（系列ID或翻译组ID）
+                        hiddenField.value = param2;
+                        
+                        // 设置显示字段的值（显示名称）
+                        input.value = itemText;
+                        
+                        // 触发change事件通知页面字段已更新
+                        const changeEvent = new Event('change', { bubbles: true });
+                        const inputEvent = new Event('input', { bubbles: true });
+                        
+                        hiddenField.dispatchEvent(changeEvent);
+                        hiddenField.dispatchEvent(inputEvent);
+                        input.dispatchEvent(changeEvent);
+                        input.dispatchEvent(inputEvent);
+                        
+                        // 隐藏搜索结果（模拟changeitem函数的行为）
+                        const searchContainers = document.querySelectorAll('.livesearch, .livesearchgroup');
+                        searchContainers.forEach(container => {
+                            container.style.display = 'none';
+                        });
+                        
+                        console.log(`🔧 手动设置完成:`);
+                        console.log(`   ${description} ID: ${param2}`);
+                        console.log(`   ${description}名称: ${itemText}`);
+                        console.log(`   隐藏字段 (${hiddenField.id}): "${hiddenField.value}"`);
+                        console.log(`   显示字段 (${input.id}): "${input.value}"`);
+                        
+                        return true;
+                    }
+                    
+                    console.log(`❌ ${description}设置失败：字段未找到`);
+                    return false;
+                };
+
+                // 通过解析onclick属性执行选择
+                const executeSelectionByOnclick = async function(item, hiddenField, input, description) {
+                    try {
+                        const onclick = item.getAttribute('onclick');
+                        const itemText = item.textContent.trim();
+                        
+                        console.log(`🔧 解析onclick: ${onclick}`);
+                        
+                        if (onclick) {
+                            const match = onclick.match(/changeitem\('([^']+)','([^']+)','([^']+)',this\)/);
+                            if (match) {
+                                const [, param1, param2, param3] = match;
+                                console.log(`📞 调用changeitem('${param1}','${param2}','${param3}') for "${itemText}"`);
+                                
+                                // 等待changeitem函数加载并执行选择
+                                const success = await waitAndExecuteChangeitem(param1, param2, param3, itemText, hiddenField, input, description);
+                                if (success) {
+                                    return true;
+                                }
+                            } else {
+                                console.log(`❌ 无法解析onclick属性: ${onclick}`);
+                            }
+                        } else {
+                            console.log(`❌ 未找到onclick属性`);
+                        }
+                        
+                        return false;
+                        
+                    } catch (error) {
+                        console.error(`通过onclick执行${description}选择时出错:`, error);
                         return false;
                     }
                 };
