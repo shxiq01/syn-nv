@@ -2235,7 +2235,12 @@
             }
             
             const currentChapter = queueData.queue[queueData.currentIndex];
-            console.log('填充队列章节表单:', currentChapter);
+            console.log('📋 填充队列章节表单:');
+            console.log(`   📖 小说: ${currentChapter.novelTitle}`);
+            console.log(`   📄 章节: ${currentChapter.chapterNumber} - ${currentChapter.chapterTitle}`);
+            console.log(`   🎯 系列标题: "${currentChapter.seriesTitle}"`);
+            console.log(`   👥 翻译组: "${currentChapter.translationGroup}"`);
+            console.log(`   🔗 章节链接: ${currentChapter.chapterUrl}`);
             
             // 更新当前章节信息显示
             const infoElement = document.getElementById('current-chapter-info');
@@ -2525,16 +2530,23 @@
                     }
                 };
 
+                console.log(`\n🚀 开始填充第${queueData.currentIndex + 1}/${queueData.totalChapters}个章节的表单:`);
+                console.log(`📊 章节详情: ${currentChapter.novelTitle} - 第${currentChapter.chapterNumber}章`);
+                
                 // 1. 全自动智能填充系列标题
+                console.log(`\n1️⃣ 填充系列标题: "${currentChapter.seriesTitle}"`);
                 const seriesOk = await autoSelectField('title_change_100', currentChapter.seriesTitle, '系列');
 
                 // 2. 填充章节号
+                console.log(`\n2️⃣ 填充章节号: c${currentChapter.chapterNumber}`);
                 fillFieldSafely('arrelease', `c${currentChapter.chapterNumber}`, '章节号');
 
                 // 3. 填充章节链接
+                console.log(`\n3️⃣ 填充章节链接`);
                 fillFieldSafely('arlink', currentChapter.chapterUrl, '章节链接');
 
                 // 4. 全自动智能填充翻译组
+                console.log(`\n4️⃣ 填充翻译组: "${currentChapter.translationGroup}"`);
                 const groupOk = await autoSelectField('group_change_100', currentChapter.translationGroup, '翻译组');
                 
                 // 全自动化状态报告
@@ -2610,20 +2622,42 @@
 
         // 清空发布表单
         clearReleaseForm: () => {
-            const formElements = [
-                'title_change_100',
-                'arrelease', 
-                'arlink',
-                'group_change_100',
-                'ardate'
+            console.log('🧹 清空发布表单...');
+            
+            // 清空显示字段
+            const displayFields = [
+                'title_change_100',   // 系列标题显示字段
+                'arrelease',          // 章节号
+                'arlink',             // 章节链接
+                'group_change_100',   // 翻译组显示字段
+                'ardate'              // 发布日期
             ];
             
-            formElements.forEach(id => {
+            // 清空隐藏字段（重要！）
+            const hiddenFields = [
+                'title100',           // 系列ID隐藏字段
+                'group100'            // 翻译组ID隐藏字段
+            ];
+            
+            [...displayFields, ...hiddenFields].forEach(id => {
                 const element = document.getElementById(id);
                 if (element) {
+                    console.log(`清空字段 ${id}: "${element.value}" → ""`);
                     element.value = '';
+                    
+                    // 触发change事件通知页面字段已清空
+                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
                 }
             });
+            
+            // 隐藏任何可能显示的搜索结果
+            const searchContainers = document.querySelectorAll('.livesearch, .livesearchgroup');
+            searchContainers.forEach(container => {
+                container.style.display = 'none';
+            });
+            
+            console.log('✅ 发布表单清空完成');
         },
 
         // 完成队列
