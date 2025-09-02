@@ -836,6 +836,10 @@
                         Utils.setStorage('foxaholic_novels', novels);
                     });
                     
+                    UIManager.addActionButton('批量同步所有小说', async () => {
+                        NovelSyncApp.startBatchSync();
+                    });
+                    
                     UIManager.addActionButton('配置同步', () => {
                         NovelSyncApp.showConfigDialog();
                     }, 'secondary');
@@ -864,9 +868,10 @@
 
         // 初始化NovelUpdates功能
         initNovelUpdatesFeatures: () => {
-            // 检查是否有章节提取触发参数
+            // 检查URL参数
             const urlParams = new URLSearchParams(window.location.search);
             const syncTrigger = urlParams.get('sync_trigger');
+            const queueKey = urlParams.get('queue_key');
             
             if (syncTrigger) {
                 console.log('检测到章节提取触发参数:', syncTrigger);
@@ -874,13 +879,19 @@
                 return;
             }
             
+            if (queueKey) {
+                console.log('检测到发布队列参数:', queueKey);
+                NovelSyncApp.handlePublishQueue(queueKey);
+                return;
+            }
+            
             if (window.location.href.includes('add-release')) {
-                // 发布页面
+                // 普通发布页面
                 UIManager.createControlPanel();
                 UIManager.updateStatus('检测到发布页面');
                 
-                UIManager.addActionButton('自动填充表单', () => {
-                    NovelSyncApp.autoFillForm();
+                UIManager.addActionButton('自动填充表单', async () => {
+                    await NovelSyncApp.autoFillForm();
                 }, 'secondary');
             }
         },
@@ -964,7 +975,7 @@
         },
 
         // 自动填充表单
-        autoFillForm: () => {
+        autoFillForm: async () => {
             if (!window.location.href.includes('add-release')) {
                 Utils.notify('当前页面不是发布页面', 'error');
                 return;
@@ -1002,54 +1013,274 @@
             console.log('开始填充NovelUpdates表单:', pendingData);
 
             try {
-                // 填充系列名称（自动补全输入框）
-                const seriesInput = document.getElementById('title_change_100');
-                if (seriesInput && pendingData.seriesTitle) {
-                    seriesInput.value = pendingData.seriesTitle;
-                    seriesInput.dispatchEvent(new Event('keyup', { bubbles: true }));
-                    console.log('填充系列名称:', pendingData.seriesTitle);
-                }
+                console.log('开始智能填充NovelUpdates发布表单...');
+                
+                // 创建辅助函数：模拟用户输入并触发自动补全
+                const fillAutocompleteField = async (inputId, value, description) => {
+                    const input = document.getElementById(inputId);
+                    if (!input || !value) return false;
+                    
+                    console.log(`正在填充${description}: ${value}`);
+                    
+                    // 清空并聚焦输入框
+                    input.value = '';
+                    input.focus();
+                    
+                    // 分段输入，减少请求次数
+                    const segments = Math.min(5, value.length); // 最多5段
+                    const segmentLength = Math.ceil(value.length / segments);
+                    
+                    for (let i = 0; i < segments; i++) {
+                        const endIndex = Math.min((i + 1) * segmentLength, value.length);
+                        input.value = value.substring(0, endIndex);
+                        
+                        // 触发输入事件
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('keyup', { bubbles: true }));
+                        
+                        // 适当延迟，避免服务器限流
+                        if (i < segments - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                        }
+                    }
+                    
+                    // 等待自动补全下拉菜单出现
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    // 查找并点击匹配的自动补全选项
+                    const autocompleteSelectors = [
+                        '.ui-autocomplete .ui-menu-item',  // jQuery UI 自动补全
+                        '.autocomplete-suggestion',        // 简单自动补全
+                        '.suggestion',                     // 通用建议项
+                        '[data-value]',                    // 带数据值的项
+                        '.dropdown-item',                  // Bootstrap 下拉项
+                        'li[role="option"]',              // ARIA 选项
+                        '.select2-results__option'        // Select2 选项
+                    ];
+                    
+                    let suggestionFound = false;
+                    for (const selector of autocompleteSelectors) {
+                        const suggestions = document.querySelectorAll(selector);
+                        console.log(`查找自动补全选项 (${selector}): 找到 ${suggestions.length} 个`);
+                        
+                        for (const suggestion of suggestions) {
+                            const suggestionText = suggestion.textContent.trim();
+                            // 查找完全匹配或包含目标值的选项
+                            if (suggestionText === value || 
+                                suggestionText.toLowerCase().includes(value.toLowerCase()) ||
+                                value.toLowerCase().includes(suggestionText.toLowerCase())) {
+                                
+                                console.log(`✅ 找到匹配项并点击: "${suggestionText}"`);
+                                suggestion.click();
+                                suggestionFound = true;
+                                break;
+                            }
+                        }
+                        if (suggestionFound) break;
+                    }
+                    
+                    if (!suggestionFound) {
+                        console.log(`⚠️ 未找到"${value}"的自动补全选项，值已填充但可能需要手动选择`);
+                    }
+                    
+                    return true;
+                };
 
-                // 填充章节号（格式：c10）
+                // 智能选择填充函数
+                const smartFillSelectField = async (inputId, value, description) => {
+                    const input = document.getElementById(inputId);
+                    if (!input || !value) return false;
+                    
+                    console.log(`🔍 智能填充${description}: "${value}"`);
+                    
+                    try {
+                        // 步骤1: 清空输入框并聚焦
+                        input.value = '';
+                        input.focus();
+                        
+                        // 步骤2: 输入搜索文本，但要缓慢避免429
+                        input.value = value;
+                        
+                        // 步骤3: 触发搜索事件
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('keyup', { bubbles: true }));
+                        
+                        console.log(`⏳ 等待${description}搜索结果...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000)); // 等待搜索结果
+                        
+                        // 步骤4: 查找匹配的选项
+                        const possibleSelectors = [
+                            '.ui-autocomplete .ui-menu-item',
+                            '.autocomplete-suggestion', 
+                            '.ui-menu-item',
+                            '[role="option"]',
+                            '.suggestion',
+                            'li:contains("' + value + '")',
+                            'div:contains("' + value + '")'
+                        ];
+                        
+                        let optionFound = false;
+                        
+                        for (const selector of possibleSelectors) {
+                            try {
+                                let options;
+                                if (selector.includes(':contains')) {
+                                    // 使用文本匹配查找
+                                    options = Array.from(document.querySelectorAll(selector.split(':contains')[0]))
+                                        .filter(el => el.textContent.trim().toLowerCase().includes(value.toLowerCase()));
+                                } else {
+                                    options = document.querySelectorAll(selector);
+                                }
+                                
+                                console.log(`📋 使用选择器 "${selector}" 找到 ${options.length} 个选项`);
+                                
+                                for (const option of options) {
+                                    const optionText = option.textContent.trim();
+                                    console.log(`🔎 检查选项: "${optionText}"`);
+                                    
+                                    // 精确匹配或包含匹配
+                                    if (optionText === value || 
+                                        optionText.toLowerCase() === value.toLowerCase() ||
+                                        optionText.toLowerCase().includes(value.toLowerCase()) ||
+                                        value.toLowerCase().includes(optionText.toLowerCase())) {
+                                        
+                                        console.log(`✅ 找到匹配项: "${optionText}" - 正在点击`);
+                                        
+                                        // 点击选项
+                                        option.click();
+                                        optionFound = true;
+                                        
+                                        // 验证是否选择成功
+                                        await new Promise(resolve => setTimeout(resolve, 500));
+                                        if (input.value && input.value.toLowerCase().includes(value.toLowerCase())) {
+                                            console.log(`🎯 ${description}选择成功: "${input.value}"`);
+                                            return true;
+                                        }
+                                        break;
+                                    }
+                                }
+                                
+                                if (optionFound) break;
+                                
+                            } catch (selectorError) {
+                                console.log(`选择器 "${selector}" 执行失败:`, selectorError.message);
+                            }
+                        }
+                        
+                        if (!optionFound) {
+                            console.log(`⚠️ 未找到"${value}"的匹配选项，请手动选择${description}`);
+                            
+                            // 显示可用选项供用户参考
+                            const allOptions = document.querySelectorAll('.ui-autocomplete .ui-menu-item, .autocomplete-suggestion, [role="option"]');
+                            if (allOptions.length > 0) {
+                                console.log(`💡 可用的${description}选项:`);
+                                Array.from(allOptions).slice(0, 10).forEach((opt, i) => {
+                                    console.log(`  ${i + 1}. "${opt.textContent.trim()}"`);
+                                });
+                            }
+                        }
+                        
+                        return optionFound;
+                        
+                    } catch (error) {
+                        console.error(`填充${description}时出错:`, error);
+                        return false;
+                    }
+                };
+
+                // 1. 智能填充系列标题
+                const seriesSuccess = await smartFillSelectField('title_change_100', pendingData.seriesTitle, '系列标题');
+
+                // 2. 填充章节号（普通字段）
                 const releaseInput = document.getElementById('arrelease');
                 if (releaseInput && pendingData.chapterNumber) {
                     releaseInput.value = `c${pendingData.chapterNumber}`;
-                    console.log('填充章节号:', `c${pendingData.chapterNumber}`);
+                    releaseInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('✅ 填充章节号:', `c${pendingData.chapterNumber}`);
                 }
 
-                // 填充章节链接
+                // 3. 填充章节链接（普通字段）
                 const linkInput = document.getElementById('arlink');
                 if (linkInput && pendingData.chapterUrl) {
                     linkInput.value = pendingData.chapterUrl;
-                    console.log('填充章节链接:', pendingData.chapterUrl);
+                    linkInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('✅ 填充章节链接:', pendingData.chapterUrl);
                 }
 
-                // 填充翻译组（自动补全输入框）
-                const groupInput = document.getElementById('group_change_100');
-                if (groupInput && pendingData.translationGroup) {
-                    groupInput.value = pendingData.translationGroup;
-                    groupInput.dispatchEvent(new Event('keyup', { bubbles: true }));
-                    console.log('填充翻译组:', pendingData.translationGroup);
-                }
+                // 4. 智能填充翻译组
+                const groupSuccess = await smartFillSelectField('group_change_100', pendingData.translationGroup, '翻译组');
 
-                // 填充发布日期（如果有指定日期）
-                const dateInput = document.getElementById('ardate');
-                if (dateInput && pendingData.releaseDate) {
+                // 5. 填充发布日期
+                if (pendingData.releaseDate) {
                     const releaseDate = new Date(pendingData.releaseDate);
                     const today = new Date();
-                    
-                    // 只有当发布日期不是今天时才填充日期字段
                     if (releaseDate.toDateString() !== today.toDateString()) {
-                        dateInput.value = releaseDate.toISOString().split('T')[0];
-                        console.log('填充发布日期:', dateInput.value);
+                        const dateInput = document.getElementById('ardate');
+                        if (dateInput) {
+                            dateInput.value = releaseDate.toISOString().split('T')[0];
+                            dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            console.log('✅ 填充发布日期:', dateInput.value);
+                        }
                     }
                 }
 
-                Utils.notify(`章节 ${pendingData.chapterNumber} 表单填充完成！请检查后提交`, 'success');
+                // 6. 最终状态检查和提醒
+                const seriesValue = document.getElementById('title_change_100')?.value || '';
+                const groupValue = document.getElementById('group_change_100')?.value || '';
+                
+                console.log('\n📋 表单填充完成状态:');
+                console.log(`  🎯 系列: "${seriesValue}" (${seriesSuccess ? '自动选择成功' : '需要手动选择'})`);
+                console.log(`  🎯 翻译组: "${groupValue}" (${groupSuccess ? '自动选择成功' : '需要手动选择'})`);
+                console.log(`  ✓ 章节: "${document.getElementById('arrelease')?.value || ''}"`);
+                console.log(`  ✓ 链接: "${document.getElementById('arlink')?.value || ''}"`);
+                
+                let message = '表单填充完成！\n\n';
+                if (!seriesSuccess) {
+                    message += '⚠️ 请手动选择Series字段\n';
+                }
+                if (!groupSuccess) {
+                    message += '⚠️ 请手动选择Group字段\n';
+                }
+                message += '\n✅ 检查无误后即可提交';
+                
+                Utils.notify(message, seriesSuccess && groupSuccess ? 'success' : 'warning');
+
+                // 添加调试帮助按钮
+                if (!seriesSuccess || !groupSuccess) {
+                    setTimeout(() => {
+                        const debugBtn = document.createElement('button');
+                        debugBtn.textContent = '🔍 显示可用选项';
+                        debugBtn.style.cssText = `
+                            position: fixed;
+                            top: 100px;
+                            right: 20px;
+                            z-index: 10000;
+                            padding: 8px 12px;
+                            background: #ff9800;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 13px;
+                        `;
+                        
+                        debugBtn.onclick = () => {
+                            NovelSyncApp.showAvailableOptions();
+                            debugBtn.remove();
+                        };
+                        
+                        document.body.appendChild(debugBtn);
+                        
+                        // 5秒后自动移除
+                        setTimeout(() => {
+                            if (debugBtn.parentNode) debugBtn.remove();
+                        }, 5000);
+                    }, 1000);
+                }
 
             } catch (error) {
-                console.error('填充表单时出错:', error);
-                Utils.notify(`填充失败: ${error.message}`, 'error');
+                console.error('智能填充表单时出错:', error);
+                Utils.notify(`智能填充失败: ${error.message}`, 'error');
             }
         },
 
@@ -1383,6 +1614,953 @@
                     Utils.setStorage(triggerInfo.dataKey, []);
                 }
             }, 1000); // 等待1秒让页面稳定
+        },
+
+        // 批量同步所有小说
+        startBatchSync: async () => {
+            try {
+                UIManager.updateStatus('开始批量同步...', 'info');
+                
+                // 1. 获取所有小说
+                const novels = Utils.getStorage('foxaholic_novels', []);
+                if (novels.length === 0) {
+                    UIManager.updateStatus('请先扫描小说列表', 'warning');
+                    return;
+                }
+
+                // 2. 过滤出已配置的小说
+                const configuredNovels = novels.filter(novel => {
+                    const config = window.NovelSyncConfig.getNovelConfig(novel.id);
+                    return config.novelUpdatesUrl && config.novelUpdatesUrl.trim() !== '';
+                });
+
+                if (configuredNovels.length === 0) {
+                    UIManager.updateStatus('没有找到已配置的小说，请先配置同步设置', 'warning');
+                    return;
+                }
+
+                UIManager.updateStatus(`开始批量同步 ${configuredNovels.length} 部小说，将逐一获取准确数据`, 'info');
+                
+                // 3. 询问用户是否继续（因为会打开多个窗口）
+                const confirmed = confirm(`批量同步将为每部小说打开NovelUpdates页面获取准确数据。\n\n这可能会打开${configuredNovels.length}个新窗口，确认继续吗？\n\n小说列表：\n${configuredNovels.map(n => `• ${n.title}`).join('\n')}`);
+                
+                if (!confirmed) {
+                    UIManager.updateStatus('用户取消了批量同步', 'info');
+                    return;
+                }
+                
+                // 4. 顺序执行同步检查
+                const syncResults = [];
+                let totalPendingChapters = 0;
+                let processedCount = 0;
+
+                for (let i = 0; i < configuredNovels.length; i++) {
+                    const novel = configuredNovels[i];
+                    
+                    try {
+                        UIManager.updateStatus(
+                            `正在同步 "${novel.title}" (${i + 1}/${configuredNovels.length})...`, 
+                            'info'
+                        );
+                        
+                        const syncResult = await NovelSyncApp.performNovelSyncCheck(novel);
+                        processedCount++;
+                        
+                        if (syncResult && syncResult.pendingSync > 0) {
+                            syncResults.push({
+                                novel: novel,
+                                result: syncResult
+                            });
+                            totalPendingChapters += syncResult.pendingSync;
+                            
+                            UIManager.updateStatus(
+                                `"${novel.title}" 完成 - 发现${syncResult.pendingSync}个待发布章节 (${processedCount}/${configuredNovels.length})`, 
+                                'success'
+                            );
+                        } else {
+                            UIManager.updateStatus(
+                                `"${novel.title}" 完成 - 暂无待发布章节 (${processedCount}/${configuredNovels.length})`, 
+                                'info'
+                            );
+                        }
+                        
+                        // 添加延迟，确保窗口操作完成
+                        await Utils.delay(2000);
+                        
+                    } catch (error) {
+                        console.error(`同步小说 ${novel.title} 失败:`, error);
+                        processedCount++;
+                        UIManager.updateStatus(
+                            `"${novel.title}" 同步失败 (${processedCount}/${configuredNovels.length})`, 
+                            'error'
+                        );
+                    }
+                }
+
+                // 4. 显示批量同步结果
+                if (syncResults.length > 0) {
+                    UIManager.updateStatus(`✅ 批量同步完成！发现 ${totalPendingChapters} 个章节待发布（来自 ${syncResults.length} 部小说）`, 'success');
+                    
+                    // 清除之前的发布按钮
+                    const existingQueueButton = document.querySelector('[id^="queue-btn-"]');
+                    if (existingQueueButton) {
+                        existingQueueButton.remove();
+                    }
+                    
+                    // 添加打开发布队列的按钮
+                    const queueButton = document.createElement('button');
+                    queueButton.id = `queue-btn-${Date.now()}`;
+                    queueButton.textContent = `🚀 打开发布队列 (${totalPendingChapters}章)`;
+                    queueButton.onclick = () => NovelSyncApp.openPublishQueue(syncResults);
+                    queueButton.style.cssText = `
+                        background: #0073aa;
+                        color: white;
+                        padding: 10px 16px;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: 600;
+                        margin-top: 10px;
+                        width: 100%;
+                        transition: background-color 0.2s;
+                    `;
+                    
+                    queueButton.addEventListener('mouseover', () => queueButton.style.backgroundColor = '#005a87');
+                    queueButton.addEventListener('mouseout', () => queueButton.style.backgroundColor = '#0073aa');
+                    
+                    const actionsContainer = document.getElementById('sync-actions');
+                    if (actionsContainer) {
+                        actionsContainer.appendChild(queueButton);
+                    }
+                    
+                } else {
+                    UIManager.updateStatus('✅ 批量同步完成！所有小说都已同步，暂无待发布章节', 'info');
+                }
+                
+                // 添加调试按钮（开发测试用）
+                if (window.location.search.includes('debug=1')) {
+                    UIManager.addActionButton('🔧 调试信息', () => {
+                        console.log('同步结果详情:', syncResults);
+                        console.log('所有配置的小说:', configuredNovels);
+                        alert(`调试信息已输出到控制台\n处理的小说数: ${configuredNovels.length}\n有待发布章节的小说: ${syncResults.length}\n总待发布章节: ${totalPendingChapters}`);
+                    }, 'secondary');
+                }
+
+            } catch (error) {
+                console.error('批量同步失败:', error);
+                UIManager.updateStatus(`批量同步失败: ${error.message}`, 'error');
+            }
+        },
+
+        // 执行单个小说的同步检查（通过iframe方式）
+        performNovelSyncCheck: async (novel) => {
+            console.log('执行小说同步检查:', novel.title);
+            
+            try {
+                // 获取小说配置
+                const config = window.NovelSyncConfig.getNovelConfig(novel.id);
+                if (!config.novelUpdatesUrl) {
+                    console.log(`小说 ${novel.title} 未配置NovelUpdates URL，跳过`);
+                    return null;
+                }
+                
+                // 通过iframe获取小说编辑页面的章节数据
+                const chaptersData = await NovelSyncApp.getChapterDataByIframe(novel.editUrl);
+                if (!chaptersData || chaptersData.length === 0) {
+                    console.log(`小说 ${novel.title} 未找到章节数据`);
+                    return null;
+                }
+                
+                // 获取NovelUpdates已发布章节
+                const publishedResult = await DataExtractor.extractPublishedChapters(config.novelUpdatesUrl);
+                let publishedChapters = [];
+                
+                if (publishedResult && publishedResult.needPageOperation) {
+                    console.log(`小说 ${novel.title} 需要页面操作获取NovelUpdates数据，使用真实数据获取`);
+                    
+                    // 使用同步引擎的实际获取方法
+                    try {
+                        console.log(`开始为 "${novel.title}" 获取NovelUpdates真实数据...`);
+                        publishedChapters = await window.NovelSyncEngine.extractChaptersFromPage(config.novelUpdatesUrl);
+                        console.log(`✅ "${novel.title}" 通过页面操作获取到 ${publishedChapters.length} 个已发布章节`);
+                        
+                        // 验证数据有效性
+                        if (!Array.isArray(publishedChapters)) {
+                            throw new Error('返回的章节数据格式不正确');
+                        }
+                        
+                    } catch (error) {
+                        console.error(`❌ 获取 "${novel.title}" 的NovelUpdates数据失败:`, error);
+                        console.log(`由于无法确认已发布状态，"${novel.title}" 将跳过此次批量同步`);
+                        
+                        // 提示用户可以单独处理这部小说
+                        Utils.notify(`"${novel.title}" 数据获取失败，建议单独同步`, 'warning');
+                        return null;
+                    }
+                } else {
+                    publishedChapters = publishedResult || [];
+                }
+                
+                // 计算未发布章节
+                console.log(`\n=== 开始分析 "${novel.title}" 的章节发布状态 ===`);
+                console.log(`foxaholic总章节数: ${chaptersData.length}`);
+                console.log(`已解锁章节数: ${chaptersData.filter(c => !c.isLocked).length}`);
+                console.log(`NovelUpdates已发布: ${publishedChapters.length}`);
+                
+                const unpublishedChapters = chaptersData.filter(foxChapter => {
+                    if (foxChapter.isLocked) {
+                        console.log(`  📍 章节${foxChapter.number}: 锁定状态，跳过`);
+                        return false;
+                    }
+                    
+                    const isPublished = publishedChapters.some(pubChapter => {
+                        const foxNum = parseFloat(foxChapter.number);
+                        const pubNum = parseFloat(pubChapter.chapter);
+                        const match = foxNum === pubNum;
+                        
+                        if (match) {
+                            console.log(`  ✓ 章节${foxChapter.number}: 已发布 (NovelUpdates: c${pubChapter.chapter})`);
+                        }
+                        return match;
+                    });
+                    
+                    if (!isPublished) {
+                        console.log(`  🔥 章节${foxChapter.number}: 需要发布 - "${foxChapter.title}"`);
+                    }
+                    
+                    return !isPublished;
+                });
+                
+                console.log(`\n=== "${novel.title}" 分析完成 ===`);
+                console.log(`需要发布的章节: ${unpublishedChapters.length}`);
+                console.log(`章节号列表: [${unpublishedChapters.map(c => c.number).join(', ')}]`);
+                
+                if (unpublishedChapters.length > 0) {
+                    return {
+                        timestamp: new Date(),
+                        novelId: novel.id,
+                        totalChapters: chaptersData.length,
+                        publishedCount: publishedChapters.length,
+                        unlockedCount: chaptersData.filter(c => !c.isLocked).length,
+                        pendingSync: unpublishedChapters.length,
+                        chapters: unpublishedChapters.map(c => ({
+                            number: c.number,
+                            title: c.title,
+                            url: c.url,
+                            releaseDate: c.releaseDate
+                        }))
+                    };
+                }
+                
+                return null;
+                
+            } catch (error) {
+                console.error(`小说 ${novel.title} 同步检查失败:`, error);
+                return null;
+            }
+        },
+
+        // 通过iframe获取小说页面的章节数据
+        getChapterDataByIframe: (editUrl) => {
+            return new Promise((resolve) => { // 移除reject参数，避免未使用警告
+                console.log('通过iframe获取章节数据:', editUrl);
+                
+                let iframe = null;
+                let timeout = null;
+                
+                const cleanup = () => {
+                    try {
+                        if (timeout) {
+                            clearTimeout(timeout);
+                            timeout = null;
+                        }
+                        if (iframe && iframe.parentNode) {
+                            document.body.removeChild(iframe);
+                        }
+                    } catch (e) {
+                        console.warn('清理iframe时出错:', e);
+                    }
+                };
+                
+                try {
+                    // 创建隐藏的iframe
+                    iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.style.visibility = 'hidden';
+                    iframe.style.position = 'absolute';
+                    iframe.style.left = '-9999px';
+                    iframe.src = editUrl;
+                    document.body.appendChild(iframe);
+                    
+                    timeout = setTimeout(() => {
+                        console.log('获取章节数据超时');
+                        cleanup();
+                        resolve([]);
+                    }, 15000); // 增加到15秒超时
+                    
+                    iframe.onload = () => {
+                        try {
+                            // 等待一小段时间让页面稳定
+                            setTimeout(() => {
+                                try {
+                                    // 防御性检查iframe是否仍然存在
+                                    if (!iframe || !iframe.parentNode) {
+                                        console.warn('iframe已被移除，停止处理');
+                                        resolve([]);
+                                        return;
+                                    }
+                                    
+                                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                    
+                                    if (!iframeDoc) {
+                                        console.warn('无法访问iframe文档');
+                                        cleanup();
+                                        resolve([]);
+                                        return;
+                                    }
+                                    
+                                    // 提取章节数据
+                                    const chapters = [];
+                                    const chapterItems = iframeDoc.querySelectorAll('#volumes-list li li');
+                                    
+                                    chapterItems.forEach((item) => {
+                                        const chapterLink = item.querySelector('.wp-manga-edit-chapter');
+                                        if (chapterLink) {
+                                            const fullText = chapterLink.textContent.trim();
+                                            
+                                            // 提取章节号
+                                            const chapterMatch = fullText.match(/\[\d+\]\s*Chapter\s*(\d+(?:\.\d+)?)/i);
+                                            const chapterNumber = chapterMatch ? chapterMatch[1] : null;
+                                            
+                                            if (chapterNumber) {
+                                                // 提取章节标题
+                                                let chapterTitle = fullText.replace(/\[\d+\]\s*/, '').replace(/\s*<i[^>]*><\/i>/, '');
+                                                
+                                                // 检查是否锁定
+                                                const hasLockIcon = chapterLink.querySelector('i.fa-lock') !== null;
+                                                let isLocked = hasLockIcon;
+                                                let unlockDate = new Date();
+                                                
+                                                const unlockSpan = item.querySelector('.unlock_free');
+                                                if (unlockSpan && hasLockIcon) {
+                                                    const unlockText = unlockSpan.textContent.trim();
+                                                    const dateMatch = unlockText.match(/Unlock on (.+)/);
+                                                    if (dateMatch) {
+                                                        unlockDate = new Date(dateMatch[1]);
+                                                        isLocked = unlockDate > new Date();
+                                                    }
+                                                } else if (!hasLockIcon) {
+                                                    isLocked = false;
+                                                }
+                                                
+                                                // 生成章节URL
+                                                let chapterUrl = '';
+                                                
+                                                // 尝试从页面的permalink样本获取小说基础URL
+                                                const permalinkElement = iframeDoc.querySelector('#sample-permalink a');
+                                                if (permalinkElement) {
+                                                    let novelBaseUrl = permalinkElement.href;
+                                                    if (!novelBaseUrl.endsWith('/')) {
+                                                        novelBaseUrl += '/';
+                                                    }
+                                                    chapterUrl = `${novelBaseUrl}chapter-${chapterNumber}/`;
+                                                } else {
+                                                    // 备用方案：从editable-post-name获取slug
+                                                    const slugElement = iframeDoc.querySelector('#editable-post-name');
+                                                    if (slugElement) {
+                                                        const novelSlug = slugElement.textContent.trim();
+                                                        chapterUrl = `https://18.foxaholic.com/novel/${novelSlug}/chapter-${chapterNumber}/`;
+                                                    } else {
+                                                        // 最后备用方案：从editUrl推断
+                                                        const novelId = editUrl.match(/post=(\d+)/)?.[1] || 'unknown';
+                                                        chapterUrl = `https://18.foxaholic.com/novel/novel-${novelId}/chapter-${chapterNumber}/`;
+                                                    }
+                                                }
+                                                
+                                                chapters.push({
+                                                    number: chapterNumber,
+                                                    title: chapterTitle,
+                                                    url: chapterUrl,
+                                                    unlockDate: unlockDate,
+                                                    isLocked: isLocked,
+                                                    releaseDate: unlockDate.toISOString()
+                                                });
+                                            }
+                                        }
+                                    });
+                                    
+                                    console.log(`通过iframe提取到 ${chapters.length} 个章节`);
+                                    cleanup();
+                                    resolve(chapters);
+                                    
+                                } catch (error) {
+                                    console.error('提取章节数据时出错:', error);
+                                    cleanup();
+                                    resolve([]);
+                                }
+                            }, 1000); // 等待1秒让页面稳定
+                            
+                        } catch (error) {
+                            console.error('访问iframe内容失败:', error);
+                            cleanup();
+                            resolve([]);
+                        }
+                    };
+                    
+                    iframe.onerror = (error) => {
+                        console.error('iframe加载失败:', error);
+                        cleanup();
+                        resolve([]);
+                    };
+                    
+                } catch (error) {
+                    console.error('创建iframe失败:', error);
+                    cleanup();
+                    resolve([]);
+                }
+            });
+        },
+
+        // 打开发布队列管理页面
+        openPublishQueue: (syncResults) => {
+            try {
+                // 创建发布队列数据
+                const publishQueue = [];
+                
+                syncResults.forEach(({ novel, result }) => {
+                    const config = window.NovelSyncConfig.getNovelConfig(novel.id);
+                    
+                    result.chapters.forEach((chapter, index) => {
+                        publishQueue.push({
+                            novelId: novel.id,
+                            novelTitle: novel.title,
+                            chapterNumber: chapter.number,
+                            chapterTitle: chapter.title,
+                            chapterUrl: chapter.url,
+                            seriesTitle: config.seriesTitle || '',
+                            translationGroup: config.translationGroup || '',
+                            releaseDate: chapter.releaseDate || new Date().toISOString()
+                        });
+                    });
+                });
+
+                // 保存发布队列到存储
+                const queueKey = `publish_queue_${Date.now()}`;
+                Utils.setStorage(queueKey, {
+                    queue: publishQueue,
+                    currentIndex: 0,
+                    totalChapters: publishQueue.length,
+                    createdAt: new Date().toISOString()
+                });
+
+                console.log(`创建发布队列，共 ${publishQueue.length} 个章节`);
+
+                // 打开发布队列管理页面
+                const publishUrl = `https://www.novelupdates.com/add-release/?queue_key=${queueKey}`;
+                const publishWindow = window.open(publishUrl, 'novel_sync_publisher');
+                
+                if (!publishWindow) {
+                    Utils.deleteStorage(queueKey);
+                    Utils.notify('无法打开发布页面，请检查浏览器弹窗设置', 'error');
+                    return;
+                }
+
+                UIManager.updateStatus(`已打开发布队列管理页面`, 'success');
+                
+            } catch (error) {
+                console.error('打开发布队列失败:', error);
+                UIManager.updateStatus(`打开发布队列失败: ${error.message}`, 'error');
+            }
+        },
+
+        // 处理发布队列
+        handlePublishQueue: (queueKey) => {
+            console.log('开始处理发布队列...');
+            
+            // 获取队列数据
+            const queueData = Utils.getStorage(queueKey);
+            if (!queueData) {
+                console.error('未找到队列数据');
+                return;
+            }
+            
+            console.log('队列数据:', queueData);
+            
+            // 创建发布队列管理界面
+            NovelSyncApp.createPublishQueueUI(queueKey, queueData);
+            
+            // 自动填充第一个章节的表单
+            if (queueData.queue.length > 0 && queueData.currentIndex < queueData.queue.length) {
+                setTimeout(async () => {
+                    await NovelSyncApp.fillCurrentChapterForm(queueData);
+                }, 1000);
+            }
+        },
+
+        // 创建发布队列管理界面
+        createPublishQueueUI: (queueKey, queueData) => {
+            // 创建队列管理面板
+            const panel = document.createElement('div');
+            panel.id = 'publish-queue-panel';
+            panel.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 20px;
+                    left: 20px;
+                    width: 400px;
+                    background: white;
+                    border: 2px solid #0073aa;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    z-index: 9999;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                ">
+                    <div style="
+                        background: #0073aa;
+                        color: white;
+                        padding: 12px 16px;
+                        border-radius: 6px 6px 0 0;
+                        font-weight: 600;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <span>发布队列管理</span>
+                        <span id="queue-progress">${queueData.currentIndex}/${queueData.totalChapters}</span>
+                    </div>
+                    <div style="padding: 16px;">
+                        <div id="current-chapter-info" style="
+                            background: #f0f8ff;
+                            padding: 12px;
+                            border-radius: 4px;
+                            margin-bottom: 12px;
+                            font-size: 14px;
+                        "></div>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="submit-and-next" style="
+                                flex: 1;
+                                background: #46b450;
+                                color: white;
+                                padding: 8px 12px;
+                                border: none;
+                                border-radius: 3px;
+                                cursor: pointer;
+                                font-size: 13px;
+                            ">提交并下一章</button>
+                            <button id="skip-chapter" style="
+                                background: #ffb900;
+                                color: white;
+                                padding: 8px 12px;
+                                border: none;
+                                border-radius: 3px;
+                                cursor: pointer;
+                                font-size: 13px;
+                            ">跳过</button>
+                            <button id="finish-queue" style="
+                                background: #dc3232;
+                                color: white;
+                                padding: 8px 12px;
+                                border: none;
+                                border-radius: 3px;
+                                cursor: pointer;
+                                font-size: 13px;
+                            ">结束</button>
+                        </div>
+                        <div id="queue-chapters" style="
+                            max-height: 200px;
+                            overflow-y: auto;
+                            margin-top: 12px;
+                            border: 1px solid #ddd;
+                            border-radius: 4px;
+                            padding: 8px;
+                        "></div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(panel);
+            
+            // 更新章节列表显示
+            NovelSyncApp.updateQueueChaptersList(queueData);
+            
+            // 绑定事件
+            document.getElementById('submit-and-next').onclick = () => {
+                NovelSyncApp.submitAndNext(queueKey);
+            };
+            
+            document.getElementById('skip-chapter').onclick = () => {
+                NovelSyncApp.skipAndNext(queueKey);
+            };
+            
+            document.getElementById('finish-queue').onclick = () => {
+                NovelSyncApp.finishQueue(queueKey);
+            };
+        },
+
+        // 更新队列章节列表显示
+        updateQueueChaptersList: (queueData) => {
+            const container = document.getElementById('queue-chapters');
+            if (!container) return;
+            
+            let html = '';
+            queueData.queue.forEach((chapter, index) => {
+                const isActive = index === queueData.currentIndex;
+                const isCompleted = index < queueData.currentIndex;
+                
+                html += `
+                    <div style="
+                        padding: 6px 8px;
+                        margin-bottom: 4px;
+                        border-radius: 3px;
+                        font-size: 12px;
+                        ${isActive ? 'background: #0073aa; color: white;' : ''}
+                        ${isCompleted ? 'background: #46b450; color: white;' : ''}
+                        ${!isActive && !isCompleted ? 'background: #f5f5f5;' : ''}
+                    ">
+                        <strong>${chapter.novelTitle}</strong> - 第${chapter.chapterNumber}章
+                        <br><span style="opacity: 0.8;">${chapter.chapterTitle}</span>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        },
+
+        // 填充当前章节表单
+        fillCurrentChapterForm: async (queueData) => {
+            if (queueData.currentIndex >= queueData.queue.length) {
+                console.log('队列已完成');
+                return;
+            }
+            
+            const currentChapter = queueData.queue[queueData.currentIndex];
+            console.log('填充队列章节表单:', currentChapter);
+            
+            // 更新当前章节信息显示
+            const infoElement = document.getElementById('current-chapter-info');
+            if (infoElement) {
+                infoElement.innerHTML = `
+                    <strong>当前章节：</strong>${currentChapter.novelTitle} - 第${currentChapter.chapterNumber}章<br>
+                    <strong>章节标题：</strong>${currentChapter.chapterTitle}
+                `;
+            }
+            
+            // 使用智能表单填充逻辑
+            try {
+                // 创建简化的填充函数（避免触发429错误）
+                const fillFieldSafely = (inputId, value, description) => {
+                    const input = document.getElementById(inputId);
+                    if (!input || !value) return false;
+                    
+                    console.log(`安全填充${description}: ${value}`);
+                    
+                    // 直接设置值，不触发自动补全
+                    input.value = value;
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    return true;
+                };
+
+                // 直接选择字段 - 最终版本
+                const autoSelectField = async (inputId, value, description) => {
+                    const input = document.getElementById(inputId);
+                    if (!input || !value) return false;
+                    
+                    console.log(`🎯 直接选择${description}: "${value}"`);
+                    
+                    try {
+                        // 方法1: 检查是否已经有值了
+                        const hiddenFieldId = inputId.replace('_change_100', '100');
+                        const hiddenField = document.getElementById(hiddenFieldId);
+                        
+                        if (hiddenField && hiddenField.value) {
+                            console.log(`✅ ${description}已有选择，隐藏值: "${hiddenField.value}"`);
+                            return true;
+                        }
+                        
+                        // 方法2: 查找页面上已存在的选择项并直接点击
+                        const changeItemSelectors = [
+                            `[onclick*="changeitem"][onclick*="${value}"]`,
+                            `[onclick*="changeitem"]:contains("${value}")`,
+                            '.change_list',
+                            '.livesearch .change_list',
+                            '.livesearchgroup .change_list'
+                        ];
+                        
+                        for (const selector of changeItemSelectors) {
+                            let elements;
+                            if (selector.includes(':contains')) {
+                                // 手动查找包含文本的元素
+                                elements = Array.from(document.querySelectorAll(selector.split(':contains')[0]))
+                                    .filter(el => el.textContent.toLowerCase().includes(value.toLowerCase()));
+                            } else {
+                                elements = document.querySelectorAll(selector);
+                            }
+                            
+                            for (const element of elements) {
+                                const text = element.textContent.trim();
+                                if (text.toLowerCase() === value.toLowerCase() || 
+                                    text.toLowerCase().includes(value.toLowerCase()) ||
+                                    value.toLowerCase().includes(text.toLowerCase())) {
+                                    
+                                    console.log(`🎯 找到匹配项，直接点击: "${text}"`);
+                                    element.click();
+                                    
+                                    await new Promise(resolve => setTimeout(resolve, 300));
+                                    
+                                    if (hiddenField && hiddenField.value) {
+                                        console.log(`✅ ${description}点击选择成功: "${text}" (ID: ${hiddenField.value})`);
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 方法3: 直接调用changeitem函数（如果能找到参数）
+                        const allChangeItems = document.querySelectorAll('[onclick*="changeitem"]');
+                        for (const item of allChangeItems) {
+                            const text = item.textContent.trim();
+                            if (text.toLowerCase().includes(value.toLowerCase()) ||
+                                value.toLowerCase().includes(text.toLowerCase())) {
+                                
+                                const onclick = item.getAttribute('onclick');
+                                const match = onclick.match(/changeitem\('([^']+)','([^']+)','([^']+)',this\)/);
+                                if (match) {
+                                    const [, param1, param2, param3] = match;
+                                    console.log(`🔧 直接调用changeitem('${param1}','${param2}','${param3}') for "${text}"`);
+                                    
+                                    if (typeof window.changeitem === 'function') {
+                                        window.changeitem(param1, param2, param3, item);
+                                        
+                                        await new Promise(resolve => setTimeout(resolve, 300));
+                                        
+                                        if (hiddenField && hiddenField.value) {
+                                            console.log(`✅ ${description}函数调用成功: "${text}" (ID: ${hiddenField.value})`);
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 方法4: 强制设置隐藏字段（最后备用）
+                        if (hiddenField) {
+                            // 尝试从现有的选择项中找到ID
+                            const potentialItems = document.querySelectorAll('[onclick*="changeitem"]');
+                            for (const item of potentialItems) {
+                                const text = item.textContent.trim();
+                                if (text.toLowerCase() === value.toLowerCase()) {
+                                    const onclick = item.getAttribute('onclick');
+                                    const match = onclick.match(/changeitem\('[^']+','([^']+)','[^']+',this\)/);
+                                    if (match) {
+                                        const itemId = match[1];
+                                        hiddenField.value = itemId;
+                                        input.value = text;
+                                        
+                                        console.log(`🔧 ${description}强制设置: "${text}" (ID: ${itemId})`);
+                                        return true;
+                                    }
+                                }
+                            }
+                            
+                            // 最后的尝试：设置一个默认值
+                            input.value = value;
+                            console.log(`⚠️ ${description}仅设置显示值: "${value}"`);
+                            return true;
+                        }
+                        
+                        console.log(`❌ ${description}选择失败`);
+                        return false;
+                        
+                    } catch (error) {
+                        console.error(`${description}选择出错:`, error);
+                        return false;
+                    }
+                };
+
+                // 1. 全自动智能填充系列标题
+                const seriesOk = await autoSelectField('title_change_100', currentChapter.seriesTitle, '系列');
+
+                // 2. 填充章节号
+                fillFieldSafely('arrelease', `c${currentChapter.chapterNumber}`, '章节号');
+
+                // 3. 填充章节链接
+                fillFieldSafely('arlink', currentChapter.chapterUrl, '章节链接');
+
+                // 4. 全自动智能填充翻译组
+                const groupOk = await autoSelectField('group_change_100', currentChapter.translationGroup, '翻译组');
+                
+                // 全自动化状态报告
+                if (seriesOk && groupOk) {
+                    console.log('🤖✅ 队列章节表单全自动填充完成！所有字段已自动选择');
+                } else {
+                    console.log(`🤖⚠️ 队列填充完成，但以下字段可能需要手动确认: ${!seriesOk ? 'Series ' : ''}${!groupOk ? 'Group' : ''}`);
+                    console.log('💡 建议检查字段内容是否正确，必要时手动调整');
+                }
+
+                console.log('✅ 队列章节表单全自动智能填充完成');
+                
+            } catch (error) {
+                console.error('智能填充队列表单失败:', error);
+            }
+        },
+
+        // 提交并下一章
+        submitAndNext: (queueKey) => {
+            console.log('用户点击提交并下一章');
+            
+            // 停止自动化操作，让用户手动处理
+            const confirmed = confirm(`📋 表单已填充完成！\n\n请手动执行以下步骤：\n1. 检查表单信息是否正确\n2. 手动点击页面的Submit按钮\n3. 等待提交成功\n4. 再次点击此按钮继续下一章\n\n点击确定继续下一章，点击取消停留在当前章节`);
+            
+            if (confirmed) {
+                console.log('用户确认提交完成，继续下一章');
+                NovelSyncApp.proceedToNext(queueKey);
+            } else {
+                console.log('用户选择停留在当前章节');
+                // 不执行任何操作，让用户继续处理当前章节
+            }
+        },
+
+        // 跳过并下一章
+        skipAndNext: (queueKey) => {
+            console.log('跳过当前章节');
+            NovelSyncApp.proceedToNext(queueKey);
+        },
+
+        // 处理下一章节
+        proceedToNext: (queueKey) => {
+            const queueData = Utils.getStorage(queueKey);
+            if (!queueData) return;
+            
+            queueData.currentIndex++;
+            
+            if (queueData.currentIndex >= queueData.totalChapters) {
+                // 队列完成
+                NovelSyncApp.finishQueue(queueKey);
+                return;
+            }
+            
+            // 保存更新的队列数据
+            Utils.setStorage(queueKey, queueData);
+            
+            // 更新进度显示
+            const progressElement = document.getElementById('queue-progress');
+            if (progressElement) {
+                progressElement.textContent = `${queueData.currentIndex}/${queueData.totalChapters}`;
+            }
+            
+            // 清空表单
+            NovelSyncApp.clearReleaseForm();
+            
+            // 更新章节列表显示
+            NovelSyncApp.updateQueueChaptersList(queueData);
+            
+            // 填充下一章节表单
+            setTimeout(async () => {
+                await NovelSyncApp.fillCurrentChapterForm(queueData);
+            }, 500);
+        },
+
+        // 清空发布表单
+        clearReleaseForm: () => {
+            const formElements = [
+                'title_change_100',
+                'arrelease', 
+                'arlink',
+                'group_change_100',
+                'ardate'
+            ];
+            
+            formElements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.value = '';
+                }
+            });
+        },
+
+        // 完成队列
+        finishQueue: (queueKey) => {
+            const queueData = Utils.getStorage(queueKey);
+            Utils.deleteStorage(queueKey);
+            
+            alert(`发布队列已完成！\n共处理了 ${queueData ? queueData.totalChapters : 0} 个章节。`);
+            
+            const panel = document.getElementById('publish-queue-panel');
+            if (panel) {
+                panel.remove();
+            }
+            
+            // 可以选择关闭窗口或跳转到其他页面
+            // window.close();
+        },
+
+        // 显示可用的Series和Group选项
+        showAvailableOptions: () => {
+            console.log('\n🔍 开始检测可用的Series和Group选项...');
+            
+            // 触发Series搜索
+            const seriesInput = document.getElementById('title_change_100');
+            const groupInput = document.getElementById('group_change_100');
+            
+            const detectOptions = (input, fieldName) => {
+                if (!input) return [];
+                
+                console.log(`\n📋 检测${fieldName}选项...`);
+                
+                // 触发搜索
+                input.focus();
+                input.value = '';
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('keyup', { bubbles: true }));
+                
+                setTimeout(() => {
+                    // 查找所有可能的选项元素
+                    const selectors = [
+                        '.ui-autocomplete .ui-menu-item',
+                        '.autocomplete-suggestion',
+                        '.ui-menu-item',
+                        '[role="option"]',
+                        '.suggestion'
+                    ];
+                    
+                    let allOptions = [];
+                    
+                    for (const selector of selectors) {
+                        const elements = document.querySelectorAll(selector);
+                        if (elements.length > 0) {
+                            console.log(`  使用 "${selector}" 找到 ${elements.length} 个${fieldName}选项:`);
+                            
+                            Array.from(elements).forEach((el, i) => {
+                                const text = el.textContent.trim();
+                                if (text) {
+                                    console.log(`    ${i + 1}. "${text}"`);
+                                    allOptions.push(text);
+                                }
+                            });
+                            break; // 找到选项后停止
+                        }
+                    }
+                    
+                    if (allOptions.length === 0) {
+                        console.log(`  ❌ 未找到${fieldName}选项`);
+                    }
+                    
+                    return allOptions;
+                }, 1000);
+            };
+            
+            // 检测Series选项
+            detectOptions(seriesInput, 'Series');
+            
+            // 1.5秒后检测Group选项
+            setTimeout(() => {
+                detectOptions(groupInput, 'Group');
+            }, 1500);
+            
+            // 提示用户
+            Utils.notify('🔍 正在检测可用选项...\n请查看控制台输出', 'info');
         }
     };
 
@@ -1535,56 +2713,56 @@
 
             // 通过打开页面并执行JavaScript获取完整章节列表
             async extractChaptersFromPage(seriesUrl) {
-                console.log('由于跨域限制，改用直接页面操作获取完整章节列表');
-                console.log('提示：脚本将打开NovelUpdates页面，请稍等片刻后返回此页面');
+                console.log('正在打开NovelUpdates页面获取完整章节列表...');
                 
                 // 生成唯一的存储键，用于在不同页面间传递数据
-                const dataKey = `chapters_${Date.now()}`;
-                const triggerKey = `trigger_${Date.now()}`;
+                const timestamp = Date.now();
+                const dataKey = `chapters_${timestamp}`;
+                const triggerKey = `trigger_${timestamp}`;
                 
                 // 保存触发信息
                 Utils.setStorage(triggerKey, {
                     action: 'extract_chapters',
                     seriesUrl: seriesUrl,
                     dataKey: dataKey,
-                    timestamp: Date.now()
+                    timestamp: timestamp
                 });
                 
                 // 打开NovelUpdates页面
-                const newWindow = window.open(seriesUrl + `?sync_trigger=${triggerKey}`, '_blank');
+                const newWindow = window.open(seriesUrl + `?sync_trigger=${triggerKey}`, `nu_extract_${timestamp}`);
                 
                 if (!newWindow) {
-                    console.error('无法打开新窗口，请检查浏览器弹窗设置');
-                    return [];
+                    Utils.deleteStorage(triggerKey);
+                    throw new Error('无法打开新窗口，请检查浏览器弹窗设置');
                 }
                 
                 // 等待数据返回
-                return new Promise((resolve) => {
+                return new Promise((resolve, reject) => {
                     let attempts = 0;
-                    const maxAttempts = 60; // 最多等待60秒
+                    const maxAttempts = 120; // 增加到2分钟超时，给用户操作时间
                     
                     const checkData = () => {
                         attempts++;
                         const chaptersData = Utils.getStorage(dataKey);
                         
-                        if (chaptersData) {
-                            console.log(`成功获取章节数据: ${chaptersData.length} 个章节`);
+                        if (chaptersData !== null) {
+                            console.log(`✅ 成功获取章节数据: ${chaptersData.length} 个章节`);
                             // 清理存储
                             Utils.deleteStorage(dataKey);
                             Utils.deleteStorage(triggerKey);
                             resolve(chaptersData);
                         } else if (attempts >= maxAttempts) {
-                            console.log('等待章节数据超时，使用分页数据');
+                            console.log('⏰ 等待章节数据超时');
                             // 清理存储
                             Utils.deleteStorage(triggerKey);
-                            resolve([]);
+                            reject(new Error('获取NovelUpdates章节数据超时'));
                         } else {
                             setTimeout(checkData, 1000); // 每秒检查一次
                         }
                     };
                     
                     // 开始检查
-                    setTimeout(checkData, 2000); // 等待2秒后开始检查，给页面加载时间
+                    setTimeout(checkData, 3000); // 等待3秒后开始检查，给页面更多加载时间
                 });
             }
 
