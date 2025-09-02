@@ -2409,57 +2409,36 @@
                     }
                 };
 
-                // 等待changeitem函数并执行选择
-                const waitAndExecuteChangeitem = async function(param1, param2, param3, itemText, hiddenField, input, description) {
-                    // 等待函数加载的最大时间（毫秒）
-                    const maxWaitTime = 5000;
-                    const checkInterval = 100;
-                    let waitedTime = 0;
+                // 快速执行字段选择（优先使用手动方式）
+                const quickExecuteSelection = async function(param1, param2, param3, itemText, hiddenField, input, description) {
+                    console.log(`🚀 快速执行${description}选择...`);
                     
-                    console.log(`⏳ 等待changeitem函数加载...`);
-                    
-                    // 等待changeitem函数和jQuery加载
-                    while (waitedTime < maxWaitTime) {
-                        if (typeof window.changeitem === 'function' && typeof window.$ !== 'undefined') {
-                            console.log(`✅ changeitem函数和jQuery已加载，开始执行选择`);
-                            
-                            try {
-                                // 创建临时元素模拟点击源
-                                const tempElement = document.createElement('span');
-                                tempElement.textContent = itemText;
-                                
-                                // 调用changeitem函数
-                                window.changeitem(param1, param2, param3, tempElement);
-                                
-                                // 等待DOM更新
-                                await new Promise(resolve => setTimeout(resolve, 300));
-                                
-                                // 检查结果
-                                if (hiddenField && hiddenField.value === param2) {
-                                    console.log(`✅ ${description}选择成功: "${itemText}"`);
-                                    console.log(`   隐藏字段值: "${hiddenField.value}"`);
-                                    console.log(`   显示字段值: "${input.value}"`);
-                                    return true;
-                                } else {
-                                    console.log(`⚠️ changeitem执行后字段未更新，尝试手动设置`);
-                                }
-                            } catch (error) {
-                                console.error(`changeitem调用失败:`, error);
-                            }
-                            
-                            break;
-                        }
+                    // 优先尝试原生changeitem函数（如果立即可用）
+                    if (typeof window.changeitem === 'function' && typeof window.$ !== 'undefined') {
+                        console.log(`✅ changeitem函数可用，尝试原生调用`);
                         
-                        await new Promise(resolve => setTimeout(resolve, checkInterval));
-                        waitedTime += checkInterval;
+                        try {
+                            const tempElement = document.createElement('span');
+                            tempElement.textContent = itemText;
+                            window.changeitem(param1, param2, param3, tempElement);
+                            
+                            // 短暂等待DOM更新
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                            
+                            // 检查结果
+                            if (hiddenField && hiddenField.value === param2) {
+                                console.log(`✅ ${description}原生调用成功: "${itemText}"`);
+                                return true;
+                            } else {
+                                console.log(`⚠️ 原生调用未生效，使用手动设置`);
+                            }
+                        } catch (error) {
+                            console.log(`⚠️ 原生调用失败，使用手动设置:`, error.message);
+                        }
                     }
                     
-                    if (waitedTime >= maxWaitTime) {
-                        console.log(`⏰ 等待changeitem函数超时，使用手动设置方案`);
-                    }
-                    
-                    // 备用方案：直接设置字段值
-                    console.log(`🛠️ 执行手动字段设置...`);
+                    // 手动设置方案（主要方法）
+                    console.log(`🛠️ 执行手动${description}设置...`);
                     
                     if (hiddenField && input) {
                         // 设置隐藏字段的值（系列ID或翻译组ID）
@@ -2483,12 +2462,7 @@
                             container.style.display = 'none';
                         });
                         
-                        console.log(`🔧 手动设置完成:`);
-                        console.log(`   ${description} ID: ${param2}`);
-                        console.log(`   ${description}名称: ${itemText}`);
-                        console.log(`   隐藏字段 (${hiddenField.id}): "${hiddenField.value}"`);
-                        console.log(`   显示字段 (${input.id}): "${input.value}"`);
-                        
+                        console.log(`🔧 ${description}手动设置完成: "${itemText}" (ID: ${param2})`);
                         return true;
                     }
                     
@@ -2510,8 +2484,8 @@
                                 const [, param1, param2, param3] = match;
                                 console.log(`📞 调用changeitem('${param1}','${param2}','${param3}') for "${itemText}"`);
                                 
-                                // 等待changeitem函数加载并执行选择
-                                const success = await waitAndExecuteChangeitem(param1, param2, param3, itemText, hiddenField, input, description);
+                                // 快速执行选择
+                                const success = await quickExecuteSelection(param1, param2, param3, itemText, hiddenField, input, description);
                                 if (success) {
                                     return true;
                                 }
